@@ -1,0 +1,95 @@
+---
+title: "Predicting Quantified Self Movement using Maching Learning"
+author: "cabruce"
+date: "November 17, 2015"
+output: html_document
+---
+
+# Executive Summary  
+The Quantified Self is a movement to combine technology and data acquisition to quantify a person's daily life. Examples of such measures are food consumed, sleep patterns, and heart rate. These measured are quantified using wearable sensors. Commercial examples include a Nike Fuelband, an Apple Watch, and a Fitbit. These wearables are accompanyied by software to help the wearer track his or her measurements over time.
+
+This project used data from four sensors to predict the exercise habits of six participants using practical machine learning. A visualization of the correlations between the prediction variables can be found in Figure 1. The algorithm was able to correctly predict the all 20 items of the testing dataset with an estimated accuracy of 99.30% and error rate error of 0.70%. A visualization of the decision tree used by the algorithm can be found in Figure 2. 
+
+
+# Results
+The packaged used in the analysis are as follows:
+```{r, cache = T, results='hide'}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+ 
+## Import and clean data
+Assuming the data has already been downloaded to the working directory, the raw data is imported and cleaned. Columns containing NA values were removed, and predictors that are outside the prediction were also removed. The final datasets include 53 predictors including classe.
+
+```{r, cache = T}
+trainCSV <- read.csv("./pml-training.csv")
+testCSV <- read.csv("./pml-testing.csv")
+```
+
+```{r, cache = T}
+trainCSV <- trainCSV[, colSums(is.na(trainCSV)) == 0] 
+testCSV <- testCSV[, colSums(is.na(testCSV)) == 0] 
+```  
+
+```{r, cache = T}
+classe <- trainCSV$classe
+trainExtra <- grepl("^X|timestamp|window", names(trainCSV))
+trainCSV <- trainCSV[, !trainExtra]
+trainFinal <- trainCSV[, sapply(trainCSV, is.numeric)]
+trainFinal$classe <- classe
+testExtra <- grepl("^X|timestamp|window", names(testCSV))
+testCSV <- testCSV[, !testExtra]
+testFinal <- testCSV[, sapply(testCSV, is.numeric)]
+```
+
+The training dataset contains both pure (70%) and validation data (30%), so a data partition needs to be made. 
+```{r, cache = T}
+set.seed(85022) 
+inTrain <- createDataPartition(trainFinal$classe, p=0.70, list=F)
+trainData <- trainFinal[inTrain, ]
+testData <- trainFinal[-inTrain, ]
+```
+
+## Data Modeling
+The predictive algorithm was constructed using the "Random Forest" technique, which better takes into account the correlation between predictors, as well as the "five-fold cross-validation"" techique.
+
+A visualization of these correlations can be seen in Figure 1. 
+```{r, cache = T}
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="color", type="lower", tl.cex = .5)
+```
+
+```{r, cache = T}
+controlRF <- trainControl(method="cv", 5)
+modelRF <- train(classe ~ ., data=trainData, method="rf", trControl=controlRF, ntree=250)
+modelRF
+```
+
+A visualization of the algorithm decision tree can be seen in Figure 2.
+
+```{r, cache = T}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel)
+```
+
+The accuracy and error of the model were estimated using the validation portion of the dataset. 
+```{r, cache = T}
+predictRF <- predict(modelRF, testData)
+confusionMatrix(testData$classe, predictRF)
+```
+
+```{r, cache = T}
+postResample(predictRF, testData$classe)
+1 - as.numeric(confusionMatrix(testData$classe, predictRF)$overall[1]) #error measure
+```
+So, the estimated accuracy is 99.30% and the estimated error is 0.70%.
+
+## Test Data
+Finally, the model is applied to the test data. The model was able to predict the results of the 20 test data points with 100% accuracy.
+```{r, cache = T, results='hide'}
+predict(modelRF, testFinal[, -length(names(testFinal))])
+```  
+
